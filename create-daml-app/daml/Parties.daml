@@ -1,0 +1,110 @@
+module Parties where
+
+import Daml.Script hiding(User)
+
+template User with
+    username: Party
+
+    -- Says that the field username of the User contract will be stored on the underlying ledger in whatever representation that ledger uses for identities
+
+    following: [Party]
+  where
+    signatory username
+        -- "Observers" need to be specified in terms of fields of "type Party" of the "contract template".
+        -- Contract signatories are automatically also contract observers.
+    observer following
+        --  This means that all party's that are element of the following field of the contract are allowed to read, or in Daml speak observe the User contract.
+
+    key username: Party
+    maintainer key
+
+    nonconsuming choice Follow: ContractId User 
+      with
+        userToFollow : Party
+        -- A "choice" on a contract defines a "possible transaction" on the ledger
+
+      controller username
+      do
+        assertMsg "You cannot follow yourself" (userToFollow /= username)
+        assertMsg "You cannot follow the same user twice" (notElem userToFollow following)
+        archive self
+        create this with following = userToFollow :: following
+    -- FOLLOW_END
+
+
+    nonconsuming choice SendMessage: ContractId Message with
+        sender: Party
+        content: Text
+      controller sender
+          -- when you exercise a choice as a controller, you're not only just acting with the authority of that controller, but you also gain the authority of the contract's signatories.
+
+      do
+        assertMsg "Designated user must follow you back to send a message" (elem sender following)
+        create Message with sender, receiver = username, content
+
+
+-- MESSAGE_BEGIN
+template Message with
+    sender: Party
+    receiver: Party
+    content: Text
+  where
+    signatory sender, receiver
+-- MESSAGE_END
+
+
+
+
+test = script do
+  alice <- allocateParty "Alice"
+  bob <- allocateParty "Bob"
+  charlie <- allocateParty "Charlie"
+
+  submit alice $ createCmd User with username = alice, following = []
+    -- create a new User contract for Alice
+
+
+  c0 <- submit alice $ createCmd User with username = alice, following = []
+  submit alice $ archiveCmd c0
+  submit alice $ createCmd User with username = alice, following = [bob, charlie]
+
+-- signatory
+
+    -- RUN WILL BE FAILSE
+
+  submit bob $ createCmd User with username = alice, following = []
+
+    -- because with 'username = alice' mà trong template contract User có viết: "signatory username"
+
+    -- =>> "only Alice" is able to "create a User contract" on which she is "signatory".
+
+    
+
+
+  submitMustFail bob $ createCmd User with username = alice, following = []
+
+
+-- Choices and Controllers
+
+-- CHOICE: the right to execute contract
+
+  c1 <- submit bob $ createCmd User with username = bob, following = []
+  c2 <- submit bob $ exerciseCmd c1 $ Follow with userToFollow = alice
+  
+
+    -- We create a new User contract for Bob. 
+    -- Then Bob exercises the Follow choice with Alice as argument. 
+    -- This passes, because "Bob controls the Follow choice" of his User contract and hence has the right to execute the choice.
+
+
+  submit alice $ exerciseCmd c2 $ Follow with userToFollow = charlie
+
+    -- You will get a script error:
+    -- because Alice isn't a controller of the Follow choice on Bob's User contract, and she can't make him follow Charlie.
+
+
+  submitMustFail alice $ exerciseCmd c2 $ Follow with userToFollow = alice
+
+  submit alice $ exerciseCmd c2 $ SendMessage with sender = alice, content = "Hello Bob!"
+
+  return ()

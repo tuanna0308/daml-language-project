@@ -1,0 +1,40 @@
+module ContractID where
+
+import User
+import Daml.Script hiding(User)
+
+
+test = script do
+  alice <- allocateParty "Alice"
+  bob <- allocateParty "Bob"
+  submit alice $ createCmd User with username=alice, following=[]
+  aliceContractId <- submit alice $ exerciseByKeyCmd @User alice $ Follow bob
+
+    -- "exerciseByKeyCmd" takes as a "first argument" the template "name of the contract" we want to "exercise a choice" on preceded by a @
+
+    -- the "second argument" is the "contract key", in this case "alice"
+
+
+--   return()
+
+  userContractIdAndContract <- queryContractKey @User alice (alice)
+
+    -- "queryContractKey" takes as "first argument" the template name (@User), 
+    --     the Party that will make the query as the second argument (alice), 
+    --     and the contract key as the third argument ((alice))
+
+
+  -- We get back an Optional Tuple, like in Haskell we can
+  -- first use fromSome to unpack the Optional Tuple when it is Some Tuple
+  -- then we access the first and second elements with helper functions (fst, snd),
+  -- or alternatively access them positionally with t._1, t._2 and so on
+
+  -- In case that the queryContractKey returns a None we throw a failure message
+
+  -- let contractId = fst $ fromSomeNote "Failed to get the contract and contract ID" userContractIdAndContract
+  -- let contract = snd $ fromSomeNote "Failed to get the contract and contract ID" userContractIdAndContract
+  -- assert $ contract == User with username=alice, following=[bob]
+  -- assert $ aliceContractId == contractId
+
+  return()
+

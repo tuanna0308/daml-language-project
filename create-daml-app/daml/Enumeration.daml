@@ -1,0 +1,45 @@
+module Enumeration where
+
+import DA.Math
+
+
+-- Enumeration
+
+data Gender
+  = M
+  | F
+  | Other Text
+
+
+prettyGender: Gender -> Text
+prettyGender gender = case gender of
+  M -> "male"
+  F -> "female"
+  Other o -> o
+
+
+-- Type synonyms
+
+-- type PhoneNumber = Int
+-- prettyPhoneNumber: PhoneNumber -> Text
+-- prettyPhoneNumber n = show n
+
+-- type PhoneNumber = Text
+-- prettyPhoneNumber: PhoneNumber -> Text
+-- prettyPhoneNumber n = n
+
+data PhoneNumber = PhoneNumber {
+  countryCode: Int,
+  digitsGroup1: Int,
+  digitsGroup2: Int,
+  digitsGroup3: Int
+}
+
+
+prettyPhoneNumber: PhoneNumber -> Text
+prettyPhoneNumber pn =
+  "+"
+  <> (show pn.countryCode)
+  <> " " <> (show pn.digitsGroup1)
+  <> " " <> (show pn.digitsGroup2)
+  <> " " <> (show pn.digitsGroup3)

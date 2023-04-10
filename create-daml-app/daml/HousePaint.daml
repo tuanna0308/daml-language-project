@@ -1,0 +1,105 @@
+module HousePaint where
+
+import Daml.Script
+
+template Customer
+    with
+        name: Party
+        money: Decimal
+        jobStatus: Bool
+    where
+        ensure money >= 0.0
+        observer name
+        signatory name
+
+        choice ConfirmHouseIsPainted: ContractId Customer
+            with
+                -- painter: Painter
+                status: Bool
+            controller name
+            do
+                -- archive self
+                -- assertMsg "Painter has not finished the job!" (painter.jobStatus)
+                create this with jobStatus = status
+
+template Painter
+    with
+        name: Party
+        money: Decimal
+        jobStatus: Bool
+    where
+        signatory name
+
+        choice UpdateJobStatus: ContractId Painter
+            with
+                status: Bool
+            controller name
+            do
+                -- archive self
+                create this with jobStatus = status
+
+template Bank
+    with
+        bankName: Party
+    where
+        observer bankName
+        signatory bankName
+
+        choice TransferMoney: ()
+            with
+                customer: ContractId Customer
+                painter: ContractId Painter
+                -- customer: Customer
+                -- painter: Painter
+                money: Decimal
+            controller bankName
+            do
+                customerContract <- fetch customer
+                painterContract <- fetch painter
+                assertMsg "The job has not done!" (painterContract.jobStatus && customerContract.jobStatus)
+                assertMsg "Money has to be less than or equal to customer's money!" (customerContract.money >= money)
+
+
+                withdrawMoneyFromCustomerCid <- create Customer with 
+                                                                    name = customerContract.name
+                                                                    money = customerContract.money - money
+                                                                    jobStatus = customerContract.jobStatus
+                payMoneyToPainterCid <- create Painter with 
+                                                            name = painterContract.name
+                                                            money = painterContract.money + money
+                                                            jobStatus = painterContract.jobStatus
+
+                pure ()
+
+-- template TransferMoney
+--     with
+--         sender: Party
+--         receiver: Party
+--         money: Decimal
+--     where
+--         signatory sender, receiver
+
+test = script do
+
+    alice <- allocateParty "Alice"
+    bob <- allocateParty "Bob"
+    hsbc <- allocateParty "HSBC"
+
+    aliceCid <- submit alice do createCmd Customer with name = alice
+                                                        money = 1000.0
+                                                        jobStatus = False
+
+    bobCid <- submit bob do createCmd Painter with name = bob
+                                                   money = 0.0
+                                                   jobStatus = False
+
+    bankCid <- submit hsbc do createCmd Bank with bankName = hsbc
+
+
+    newBobCid <- submit bob do exerciseCmd bobCid $ UpdateJobStatus with status = True
+
+    newAliceCid <- submit alice do exerciseCmd aliceCid $ ConfirmHouseIsPainted with status = True
+
+    submit hsbc do exerciseCmd bankCid $ TransferMoney with customer = newAliceCid, painter = newBobCid, money = 500.0
+
+    pure ()

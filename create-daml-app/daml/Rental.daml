@@ -1,0 +1,98 @@
+module Rental where
+
+import Daml.Script
+import DA.Date
+
+
+data RentalInformation = RentalInformation
+    with
+        terms : Text
+        price : Decimal
+        currency: Currency
+        startDate: Date
+        endDate: Date
+    deriving(Eq, Show)
+
+data Currency = EUR | USD | HKD | GBP deriving(Eq, Show)
+
+
+
+template RentalProposal
+    with
+        landlord : Party
+        tenant : Party
+        rentalInformation : RentalInformation
+    where
+        ensure rentalInformation.price > 0.0
+        signatory landlord
+
+        observer tenant
+            -- Need to define otherwise it will throw an error:  
+                    {-
+                    Attempt to fetch or exercise a contract not visible to the reading parties.
+                    Contract:  #0:0 (Rental:RentalProposal)
+                    actAs: 'Tenant'
+                    readAs:
+                    Disclosed to: 'Landlord' 
+                    -}
+
+        choice AcceptRentalProposal: ContractId RentalAgreement
+            controller tenant
+            do
+                assertMsg "The currency must be in EUR" (rentalInformation.currency == EUR)
+                create RentalAgreement with ..
+
+        choice RejectRentalProposal: ContractId Rejection
+            with rejectReason: Text
+            controller tenant
+            do
+                create Rejection with ..
+
+template RentalAgreement
+    with
+        landlord : Party
+        tenant : Party
+        rentalInformation : RentalInformation
+    where
+        signatory landlord, tenant
+
+template Rejection
+    with 
+        landlord : Party
+        tenant : Party
+        rejectReason: Text
+    where 
+        signatory tenant
+        
+
+setupRental = script do
+    landlord <- allocatePartyWithHint "Landlord" (PartyIdHint "Landlord")
+    tenant1 <- allocatePartyWithHint "Tenant1" (PartyIdHint "Tenant1")
+    tenant2 <- allocatePartyWithHint "Tenant2" (PartyIdHint "Tenant2")
+
+    alice <- allocatePartyWithHint "Alice" (PartyIdHint "Alice")
+    bob <- allocatePartyWithHint "Bob" (PartyIdHint "Bob")
+
+
+    let 
+        terms = "No electricity fee included"
+        price:Decimal = 1000.0
+        currency = EUR
+        startDate = date 2023 Jan 01
+        endDate = date 2023 Apr 30
+
+    let rentalInformation = RentalInformation with ..
+
+    rentalPoposalCid1 <- submit landlord do createCmd RentalProposal with tenant = tenant1, ..
+
+    submit tenant1 do exerciseCmd rentalPoposalCid1 $ AcceptRentalProposal
+
+    rentalPoposalCid2 <- submit landlord do createCmd RentalProposal with tenant = tenant2, ..
+
+    submit tenant2 do exerciseCmd rentalPoposalCid2 $ RejectRentalProposal with rejectReason = "abc"
+
+    -- aliceRentalPoposalCid <- submit alice do createCmd RentalProposal with landlord = alice, tenant = bob, ..
+
+    -- submit bob do exerciseCmd aliceRentalPoposalCid RejectRentalProposal with rejectReason = "abc"
+
+    return ()

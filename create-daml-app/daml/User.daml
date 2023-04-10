@@ -1,0 +1,127 @@
+-- Copyright (c) 2022 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module User where
+
+
+import Daml.Script hiding(User)
+
+
+
+-- MAIN_TEMPLATE_BEGIN
+template User with
+    username: Party
+
+    -- Says that the field username of the User contract will be stored on the underlying ledger in whatever representation that ledger uses for identities
+
+    following: [Party]
+    
+    -- email: Optional Text
+  where
+    signatory username
+    observer following
+
+      --  This means that all party's that are element of the following field of the contract are allowed to read, or in Daml speak observe the User contract.
+
+-- MAIN_TEMPLATE_END
+
+    key username: Party
+    maintainer key
+
+    -- FOLLOW_BEGIN
+
+      -- You give a party the right to execute a choice and hence commit that transaction, by making it the controller of that choice.
+
+    nonconsuming choice Follow: ContractId User 
+      with
+        userToFollow: Party
+      controller username
+      do
+        assertMsg "You cannot follow yourself" (userToFollow /= username)
+        assertMsg "You cannot follow the same user twice" (notElem userToFollow following)
+        archive self
+        create this with following = userToFollow :: following
+    -- FOLLOW_END
+
+    nonconsuming choice SendMessage: ContractId Message 
+      with
+        sender: Party
+        content: Text
+      controller sender
+      do
+        assertMsg "Designated user must follow you back to send a message" (elem sender following)
+        create Message with sender, receiver = username, content
+
+
+-- MESSAGE_BEGIN
+template Message with
+    sender: Party
+    receiver: Party
+    content: Text
+  where
+    signatory sender, receiver
+-- MESSAGE_END
+
+
+
+
+
+-- ALIAS_BEGIN
+template Alias with
+    username: Party
+    alias: Text
+    public: Party
+  where
+    signatory username
+    observer public
+
+    key (username, public) : (Party, Party)
+    maintainer key._1
+
+    nonconsuming choice Change: ContractId Alias with
+        newAlias: Text
+      controller username
+      do
+        archive self
+        create this with alias = newAlias
+-- ALIAS_END
+
+
+
+
+
+test : Script (ContractId Message)
+test = script do
+
+  alice <- allocateParty "Alice"
+  bob <- allocateParty "Bob"
+  charlie <- allocateParty "Charlie"
+  c0 <- submit alice $ createCmd User with username = alice, following = []
+
+    --  here we allocate new parties Alice, Bob and Charlie, and create a new User contract for Alice on the simple in-memory ledger of the IDE:
+
+  submit alice $ archiveCmd c0
+  submit alice $ createCmd User with username = alice, following = [bob, charlie]
+
+    -- let Alice delete that contract and create one with the other two parties as followers
+    -- Daml's contracts are immutable. The only way to change the content of a contract is to archive it and create a new one. 
+
+  submitMustFail bob $ createCmd User with username = alice, following = []
+
+    -- a non-signatory party tries to create a contract for a different signatory.
+    -- only Alice is able to create a User contract on which she is signatory.
+
+  c1 <- submit bob $ createCmd User with username = bob, following = []
+  c2 <- submit bob $ exerciseCmd c1 $ Follow with userToFollow = alice
+
+    -- Bob controls the Follow choice of his User contract and hence has the right to execute the choice.
+
+  submitMustFail alice $ exerciseCmd c2 $ Follow with userToFollow = charlie
+
+  --  Alice isn't a controller of the Follow choice on Bob's User contract, and she can't make him follow Charlie.
+
+
+  submit alice $ exerciseCmd c2 $ SendMessage with sender = alice, content = "Hello Bob!"
+
+
+

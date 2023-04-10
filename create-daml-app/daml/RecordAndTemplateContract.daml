@@ -1,0 +1,72 @@
+module RecordAndTemplateContract where
+
+import Daml.Script
+import DA.Date
+
+
+
+-- Records
+
+data Address = Address {
+  street: Text,
+  city: Text,
+  country: Text
+} deriving (Eq, Show)
+
+data Laptop = Laptop {
+  version: Text,
+  name: Text,
+  available: Int
+} deriving (Eq, Show)
+
+-- The deriving (Eq, Show) makes your record instances of the Equality and Show type classes. This is necessary if you want your record to be a field of a contract template.
+
+data Person = Person {
+  name: Text,
+  address: Address,
+  age: Int,
+  birthday: Date
+}
+
+-- create a new Person record
+
+testPerson: Person
+testPerson = Person {name = "Alice", address = Address {street = "RabbitStreet", city = "QueenOfHearts", country = "Wonderland"}, age = 7, birthday = date 30 Oct 2013}
+
+-- deconstruct a record
+
+prettyAddress: Address -> Text
+prettyAddress (Address aStreet aCity aCountry) = aStreet <> " - " <> aCity <> " - " <> aCountry
+
+-- or 
+
+prettyAddress1: Address -> Text
+prettyAddress1 addr = addr.street <> " - " <> addr.city <> " - " <> addr.country
+
+
+{-
+You can think of a "contract template" as a "record data typ"e annotated with 
+what parties are "signatories", 
+what parties are "observing" the contract 
+and what "choices" to build transactions are made available by the contract
+-}
+
+template PersonContract
+  with
+    name: Party
+
+      -- at least one field needs to be of type "Party" in a template, so it can be used as "signatory"
+
+    school: Text
+    laptop: Laptop
+    address: Address
+    age: Int
+  where
+    signatory name
+
+test : Script ()
+test = script do
+  alice <- allocateParty "Alice"
+  p <- submit alice $ createCmd $ PersonContract {name = alice, school = "abc", laptop = Laptop {version = "HP 1.0.2", name = "window", available = 1}, address = Address {street = "RabbitStreet", city = "QueenOfHearts", country = "Wonderland"}, age = 7}
+  Some c <- queryContractId alice p
+  assert $ c.name == alice

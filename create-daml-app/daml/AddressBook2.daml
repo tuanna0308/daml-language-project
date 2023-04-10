@@ -1,0 +1,166 @@
+module AddressBook2 where
+
+import Daml.Script
+
+import DA.Date
+
+import DA.Set
+
+import qualified DA.Map as M
+
+
+-- List 
+
+{-
+(++): [a] -> [a] -> [a] Concatenate two lists
+(::): a -> [a] -> [a] Add an element to the beginning of a list.
+sort: Ord a => [a] -> [a] Stable sorting of lists with elements that can be compared. sort [3, 2, 1] -- [1, 2, 3]
+dedup: Ord a => [a] -> [a] Removes duplicates from a list. dedup [3, 3, 2, 1] -- [3, 2, 1]`
+takeWhile: (a -> Bool) -> [a] -> [a] Take all elements from the beginning of a list as long as the given predicate is satisfied. takeWhile (> 3) [5, 4, 3, 2, 1] -- [5, 4]
+head: [a] -> a Take the first element from a list. Be sure to assert that the list isn't empty, otherwise you'll get a runtime error. head [1, 2, 3] -- 1
+last: [a] -> a Extract the last element from a list. Again, make sure that the list is not empty. last [1, 2, 3] -- 3
+delete: a -> [a] -> a Delete the first occurence of the given element from a list if it is present. delete 1 [1, 2, 3] -- [2, 3]
+(\\): Eq a => [a] -> [a] -> [a] List difference. [1, 2, 3, 4, 5, 6] \\ [1, 3, 5] -- [2, 4, 6]
+foldl: (b -> a -> b) -> b -> [a] -> b foldl f initialValue xs is a left associative fold of the function f over a list xs updating an accumulator of type b starting with the initialValue and finally returning that accumulator. foldl (\x y -> x + y) 0 [1, 2, 3] -- 6
+
+-}
+
+-- Records
+
+data Address = Address {
+  street: Text,
+  city: Text,
+  country: Text
+} deriving (Eq, Show)
+
+-- The deriving (Eq, Show) makes your record instances of the Equality and Show type classes. This is necessary if you want your record to be a field of a contract template.
+
+data Person = Person {
+  name: Text,
+  address: [Address],
+  age: Int,
+  birthday: Date
+}
+
+-- create a new Person record
+
+testPerson: Person
+testPerson = Person {name = "Alice", address = [Address {street = "RabbitStreet", city = "QueenOfHearts", country = "Wonderland"}], age = 7, birthday = date 30 Oct 2013}
+
+
+-- Map and Fold 
+
+-- 1.
+
+-- int[] xs = {0, 1, 2, 3, 5, 8, 13};
+-- int[] ys = {};
+-- for (int i = 0; i < xs.length(); i++) {
+--   ys[i] = xs[i] * 3;
+-- }
+
+-- Equals
+
+timesThree: [Int]
+timesThree = [x * 3 | x <- [0, 1, 2, 3, 5, 8, 13]]
+
+
+evenElements: [Int]
+evenElements = [x | x <- [0, 1, 2, 3, 5, 8, 13], x % 2 == 0]
+
+
+products: [Int]
+products = [x * y | x <- [1, 2, 3], y <- [1, 2, 3]] -- [1, 2, 3, 2, 4, 6, 3, 6, 9]
+
+
+-- 2.
+
+-- int[] xs = {0, 1, 2, 3, 5, 8, 13};
+-- y = 0;
+-- for (int i = 0; i < xs.length(); i++) {
+--   y = y + x[i];
+-- }
+
+-- Equals
+
+total: Int
+total = foldl (\y x -> y + x) 0 [0, 1, 2, 3, 5, 8, 13]
+
+
+
+
+
+-- Set 
+
+  -- Every element of a set is unique and there is no order defined between the elements
+
+data Person2 = Person2 {
+  name: Text,
+  addresses: Set Address,
+  age: Int
+}
+
+-- testPerson: Person2
+-- testPerson2 = Person {name = "Alice", addresses = fromList [Address {street = "RabbitStreet", city = "QueenOfHearts", country = "Wonderland"}], age = 7}
+
+
+-- Maps 
+
+type PhoneNumber = Int
+type PhoneBook =  M.Map PhoneNumber Person
+-- Map<PhoneNumber, Person>
+
+emptyPhoneBook: PhoneBook
+emptyPhoneBook = M.empty
+
+testPhoneBook: PhoneBook
+testPhoneBook = M.insert 123456789 testPerson emptyPhoneBook
+-- insert to emptyPhoneBook with key = 123456789 and value = testPerson
+
+testPhoneBook1: PhoneBook
+testPhoneBook1 = M.insert 123456789 (testPerson with name = "police") testPhoneBook
+
+maybeAPerson: Optional Person
+maybeAPerson = M.lookup 123456789 testPhoneBook
+
+
+anotherPhoneBook: PhoneBook
+anotherPhoneBook = M.fromList [(123456789, testPerson), (911, testPerson with name="police")]
+
+
+
+-- Optional 
+
+data Person1 = Person1 {
+  name: Text,
+  address: Address,
+  age: Int,
+  email: Optional Text
+}
+
+
+-- testPerson: Person
+-- testPerson = Person {name = "Alice", address = Address {street = "RabbitStreet", city = "TheBigUnknown", country = "Wonderland"}, age = 7, email = Some "alice@wonderland.com"}
+
+
+-- testPerson: Person
+-- testPerson = Person {name = "Alice", address = Address {street = "RabbitStreet", city = "TheBigUnknown", country = "Wonderland"}, age = 7, email = None}
+
+
+prettyEmail: Optional Text -> Text
+prettyEmail mbEmail = case mbEmail of
+  None -> " -- "
+  Some email -> email
+
+-- Equal
+
+-- prettyEmail: Optional Text -> Text
+-- prettyEmail mbEmail = fromOptional " -- " mbEmail
+
+  -- fromOptional = None
+
+
+
+-- If you have a list of optional values, but you're only interested in the values that are present, you can filter them with catOptionals
+
+-- allEmails: [Text]
+-- allEmails = catOptionals [testPerson.email]

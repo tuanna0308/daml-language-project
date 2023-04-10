@@ -1,0 +1,84 @@
+module UserDemo where
+
+import Daml.Script hiding(User)
+
+-- MAIN_TEMPLATE_BEGIN
+template User with
+    username: Party
+    following: [Party]
+  where
+    signatory username
+    observer following
+-- MAIN_TEMPLATE_END
+
+    key username: Party
+    maintainer key
+
+    -- FOLLOW_BEGIN
+    nonconsuming choice Follow: ContractId User with
+        userToFollow: Party
+      controller username
+      do
+        assertMsg "You cannot follow yourself" (userToFollow /= username)
+        assertMsg "You cannot follow the same user twice" (notElem userToFollow following)
+        archive self
+
+        trace "adding new follower" (create this with following = userToFollow :: following)
+
+        -- create this with following = userToFollow :: following
+    -- FOLLOW_END
+
+-- ALIAS_BEGIN
+template Alias with
+    username: Party
+    alias: Text
+    public: Party
+  where
+    signatory username
+    observer public
+
+    key (username, public) : (Party, Party)
+    maintainer key._1
+
+    nonconsuming choice Change: ContractId Alias with
+        newAlias: Text
+      controller username
+      do
+        archive self
+        create this with alias = newAlias
+-- ALIAS_END
+
+
+
+
+test = script do
+
+    alice <- allocateParty "Alice"
+    bob <- allocateParty "Bob"
+
+    aliceCid <- submit alice do createCmd User with username = alice; following = []
+    submit bob do createCmd User with username = bob; following = []
+
+    newAliceCid <- submit alice do exerciseCmd aliceCid $ Follow bob 
+
+    submitMustFail alice do exerciseCmd aliceCid $ Follow bob
+
+    aliceUser <- do
+      mbAliceUser <- queryContractId alice newAliceCid
+      case mbAliceUser of
+        None -> fail "Alice doesn't have a User contract"
+        Some aliceUser -> return aliceUser
+    
+    assertMsg "Whoops!" (aliceUser.following == [bob])
+
+
+    debug "done!"
+
+
+      -- cd create-daml-app
+      -- daml start
+
+      -- New terminal
+
+      -- cd create-daml-app
+      -- daml script --dar .daml/dist/create-daml-app-0.1.0.dar --script-name User:test --ledger-host localhost --ledger-port 6865 --wall-clock-time

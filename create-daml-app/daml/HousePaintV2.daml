@@ -1,0 +1,207 @@
+module HousePaintV2 where
+
+import Daml.Script
+
+template BankAccount
+    with
+        owner: Party
+        balance: Decimal
+        bankName: Party
+    where
+        ensure balance >= 0.0
+        observer owner
+        signatory bankName
+
+        key (owner, bankName) : (Party, Party)
+        maintainer key._2
+
+        -- key bankName : Party
+        -- maintainer key
+
+        choice WithdrawMoney: ContractId BankAccount
+            with
+                money: Decimal
+            controller bankName
+            do
+                assertMsg "Cannot update balance since the money is greater than one" (balance > money && money > 0.0) 
+                create this with balance = balance - money
+
+        choice DepositMoney: ContractId BankAccount
+            with
+                money: Decimal
+            controller bankName
+            do 
+                assertMsg "Money has to be greater than 0" (money > 0.0)
+                create this with balance = balance + money
+        
+template Customer
+    with
+        name: Party
+        -- account: BankAccount
+        jobStatus: Bool
+    where
+        observer name
+        signatory name
+
+        nonconsuming choice RequestPaintHouse: ContractId PaintRequest
+            with
+                painter: Party
+                money: Decimal
+            controller name
+            do
+                create PaintRequest with customer = name, ..
+
+        choice ConfirmHouseIsPainted: ContractId Customer
+            with
+                status: Bool
+            controller name
+            do
+                create this with jobStatus = status
+
+        nonconsuming choice RequestPayMoney: ContractId PayMoneyRequest
+            with    
+                to: Party
+                bankName: Party
+                money: Decimal
+            controller name
+            do
+                create PayMoneyRequest with from = name, ..
+
+template Painter
+    with
+        name: Party
+        -- account: BankAccount
+        jobStatus: Bool
+    where
+        signatory name
+
+        nonconsuming choice AcceptPaintRequest: ContractId PaintAgreement
+            with
+                customer: Party
+                money: Decimal
+            controller name
+            do
+                create PaintAgreement with painter = name, ..
+
+        choice UpdateJobStatus: ContractId Painter
+            with
+                status: Bool
+            controller name
+            do
+                create this with jobStatus = status
+
+
+template PaintRequest
+    with
+        customer: Party
+        painter: Party
+        money: Decimal
+    where
+        signatory customer
+
+template PaintAgreement
+    with
+        customer: Party
+        painter: Party
+        money: Decimal
+    where
+        observer customer
+        signatory painter
+
+template PayMoneyRequest
+    with
+        from: Party
+        to: Party
+        money: Decimal
+        bankName: Party
+    where
+        observer bankName
+        signatory from
+        
+
+-- template Bank
+--     with
+--         bankName: Party
+--     where
+--         observer bankName
+--         signatory bankName
+
+        -- nonconsuming choice TransferMoney: ()
+        --     with
+        --         customer: ContractId Customer
+        --         painter: ContractId Painter
+        --         -- customer: Customer
+        --         -- painter: Painter
+        --         money: Decimal
+        --     controller bankName
+        --     do
+        --         customerContract <- fetch customer
+        --         painterContract <- fetch painter
+        --         assertMsg "The job has not done!" (painterContract.jobStatus && customerContract.jobStatus)
+                -- assertMsg "Money has to be less than or equal to customer's money!" (customerContract.money >= money)
+
+                -- let accountCustomer =  BankAccount with owner = customerContract.name
+                --                                     balance = customerContract.account.balance - money
+                --                                     bankName = bankName
+                -- let accountPainter =  BankAccount with  owner = painterContract.name
+                --                                     balance = painterContract.account.balance + money
+                --                                     bankName = bankName
+
+                
+
+                -- withdrawMoneyFromCustomerCid <- updat Customer with 
+                --                                                     name = customerContract.name
+                --                                                     account = accountCustomer
+                --                                                     jobStatus = customerContract.jobStatus
+                -- payMoneyToPainterCid <- create Painter with 
+                --                                             name = painterContract.name
+                --                                             account = accountPainter
+                --                                             jobStatus = painterContract.jobStatus
+
+                -- pure ()
+
+-- template TransferMoney
+--     with
+--         sender: Party
+--         receiver: Party
+--         money: Decimal
+--     where
+--         signatory sender, receiver
+
+test = script do
+
+    alice <- allocateParty "Alice"
+    bob <- allocateParty "Bob"
+    hsbc <- allocateParty "HSBC"
+
+    aliceAccountCid <- submit hsbc do createCmd BankAccount with owner = alice
+                                                                 balance = 1000.0
+                                                                 bankName = hsbc
+
+    bobAccountCid <- submit hsbc do createCmd BankAccount with owner = bob
+                                                               balance = 50.0
+                                                               bankName = hsbc
+
+    aliceCid <- submit alice do createCmd Customer with name = alice
+                                                        jobStatus = False
+    bobCid <- submit bob do createCmd Painter with name = bob
+                                                   jobStatus = False
+    -- bankCid <- submit hsbc do createCmd Bank with bankName = hsbc
+
+    let salary:Decimal = 500.0
+    
+    requestPaintCid <- submit alice do exerciseCmd aliceCid $ RequestPaintHouse with painter = bob, money = salary, ..
+
+    acceptPaintRequest <- submit bob do exerciseCmd bobCid $ AcceptPaintRequest with customer = alice, money = salary, ..
+
+    newBobCid <- submit bob do exerciseCmd bobCid $ UpdateJobStatus with status = True
+
+    newAliceCid <- submit alice do exerciseCmd aliceCid $ ConfirmHouseIsPainted with status = True
+
+    submit alice do exerciseCmd newAliceCid $ RequestPayMoney with to = bob, bankName = hsbc, money = salary, ..
+
+    submit hsbc do exerciseByKeyCmd @BankAccount (alice, hsbc) $ WithdrawMoney with money = salary
+
+    submit hsbc do exerciseByKeyCmd @BankAccount (bob, hsbc) $ DepositMoney with money = salary
+
+    pure ()

@@ -1,0 +1,17 @@
+module Functions where
+
+import DA.Math
+
+-- Functions
+
+answer: Int
+answer = 42
+
+square: Int -> Int
+square x = x * x
+
+diagonal: Decimal -> Decimal -> Decimal
+diagonal a b = (a^2 + b^2) ** 0.5
+
+
+

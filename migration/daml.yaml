@@ -1,0 +1,25 @@
+# for config file options, refer to
+# https://docs.daml.com/tools/assistant.html#project-config-file-daml-yaml
+
+sdk-version: 2.6.0
+name: migration
+source: daml
+version: 0.0.1
+dependencies:
+  - daml-prim
+  - daml-stdlib
+  - daml-script
+data-dependencies:
+  - ../create-daml-app/create-daml-app-0.1.0.dar
+  - ../forum/forum-0.1.0.dar
+  - ../create-daml-app/create-daml-app-0.1.1.dar
+  - ../forum/forum-0.1.1.dar
+build-options:
+- '--package'
+- 'create-daml-app-0.1.0 with (User as V1.User)'
+- '--package'
+- 'create-daml-app-0.1.1 with (User as V2.User)'
+- '--package'
+- 'forum-0.1.0 with (Forum as V1.Forum)'
+- '--package'
+- 'forum-0.1.1 with (Forum as V2.Forum)'

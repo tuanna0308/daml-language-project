@@ -1,0 +1,20 @@
+module Organizer where
+
+-- import AddressBook
+import AddressBook2 (Person(..), Address(..))
+-- import Calendar (Calendar(..))
+
+-- The (..) means that the data type as well as all its constructors should be imported.
+
+import qualified AddressBook2 as A
+-- import qualified Calendar as C
+
+
+data Organizer = Organizer {
+  owner: Person
+}
+
+-- data Organizer = Organizer {
+--   owner: A.Person,
+--   calendar: C.Calendar
+-- }

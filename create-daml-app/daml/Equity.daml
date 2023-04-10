@@ -1,0 +1,83 @@
+module Equity where
+
+import Daml.Script
+
+template Equity 
+    with
+        issuer : Party
+        owner : Party
+        ticker : Text
+        quantity : Decimal
+    where
+        ensure ticker /= "" && quantity >= 0.0
+        signatory issuer
+        observer owner
+        
+        -- nonconsuming choice EquitySplit: (ContractId Equity, ContractId Equity) 
+
+            -- nonconsuming: will NOT automatically archive
+
+        choice EquitySplit: (ContractId Equity, ContractId Equity) 
+            with
+                splitQty: Decimal
+            controller owner
+            do
+                splitQtyCid <- create Equity with quantity = splitQty, ..
+                -- splitQtyCid <- create this with quantity = splitQty
+
+                remainingQtyCid <- create Equity with quantity = quantity - splitQty, ..
+                -- remainingQtyCid <- create this with quantity = quantity - splitQty
+
+                return (splitQtyCid, remainingQtyCid)
+
+        choice EquityTransfer: (ContractId Equity, ContractId Equity)
+            with
+                to: Party
+            controller owner
+            do
+                transferQtyCid <- create this with owner = to
+                remainingQtyCid <- create this with quantity = 0.0
+                return (remainingQtyCid, transferQtyCid)
+
+        choice TransferWithQuantity: (ContractId Equity, ContractId Equity)
+            with
+                quantityTransfer: Decimal
+                to: Party
+            controller owner
+            do
+                transferQtyCid <- create this with owner = to, quantity = quantityTransfer
+                remainingQtyCid <- create this with quantity = quantity - quantityTransfer
+                return (transferQtyCid, remainingQtyCid)
+
+
+        choice Transfer: ContractId Equity
+            with to: Party
+            controller owner
+            do
+                create this with owner = to
+
+setup = script do
+    hsbc <- allocatePartyWithHint "HSBC" (PartyIdHint "HSBC")
+    alice <- allocatePartyWithHint "Alice" (PartyIdHint "Alice")
+    charlie <- allocatePartyWithHint "Charlie" (PartyIdHint "Charlie")
+    bob <- allocatePartyWithHint "Bob" (PartyIdHint "Bob")
+    
+    let ticker = "10.VN"
+    let quantity = 100.0
+
+    debug $ ticker
+    debug (quantity)
+
+    equityCid <- submit hsbc do createCmd Equity with issuer = hsbc
+                                                      owner = alice
+                                                      ticker
+                                                      quantity
+
+    (splitEquityCid, remainingEquityCid) <- submit alice do exerciseCmd equityCid $ EquitySplit with splitQty = 60.0
+    -- submit alice do exerciseCmd equityCid EquityTransfer with to = bob
+
+    (transferCid, remainingCid) <- submit alice do exerciseCmd splitEquityCid $ TransferWithQuantity with {to = bob, quantityTransfer = 50.0}
+
+    submit alice do exerciseCmd remainingCid $ Transfer with to = charlie
+
+    pure ()
