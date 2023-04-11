@@ -8,6 +8,11 @@ module PaintGuide where
 import Daml.Script
 import Iou
 
+data Amount = Amount {
+  value: Decimal,
+  currency: Text
+} deriving (Eq, Show)
+
 template PaintHouse
   with
     painter: Party
@@ -55,8 +60,7 @@ template OfferToPaintHouseByOwner
           paint <- create $ PaintHouse with painter; houseOwner
           return iouId2
 
-painterOffers =
-  script do
+painterOffers = script do
     bank <- allocateParty "Bank"
     alice <- allocateParty "Alice"
     painter <- allocateParty "Painter"
@@ -71,8 +75,7 @@ painterOffers =
 
 painterOffersAndAliceAccepts = painterOffersAndHouseOwnerAccepts "Painter" "Alice" "Bank"
 
-painterOffersAndHouseOwnerAccepts painter houseOwner bank =
-  script do
+painterOffersAndHouseOwnerAccepts painter houseOwner bank = script do
     painter <- allocateParty painter
     houseOwner <- allocateParty houseOwner
     bank <- allocateParty bank
@@ -80,8 +83,7 @@ painterOffersAndHouseOwnerAccepts painter houseOwner bank =
     iouId <- submit bank do
         createCmd $ Iou with payer = bank; owner = houseOwner; amount = price; viewers = []
     offerId <- submit painter do
-        createCmd $ OfferToPaintHouseByPainter with
-          painter = painter; houseOwner = houseOwner; bank = bank; amount = price
+        createCmd $ OfferToPaintHouseByPainter with painter = painter; houseOwner = houseOwner; bank = bank; amount = price
     painterIouId <- submit houseOwner do
       exerciseCmd offerId AcceptByOwner with iouId
     submit painter do 
@@ -94,8 +96,7 @@ davidOffersAndAliceAccepts =
 
 aliceOffersAndPainterAccepts = houseOwnerOffersAndPainterAccepts "Painter" "Alice" "Bank"
 
-houseOwnerOffersAndPainterAccepts painter houseOwner bank =
-  script do
+houseOwnerOffersAndPainterAccepts painter houseOwner bank = script do
     painter <- allocateParty painter
     houseOwner <- allocateParty houseOwner
     bank <- allocateParty bank
@@ -106,8 +107,7 @@ houseOwnerOffersAndPainterAccepts painter houseOwner bank =
         createCmd $ DiscloseIou with sender = houseOwner; receiver = painter; iou = iouId
     submit houseOwner do exerciseCmd discloseIou Disclose
     offerId <- submit houseOwner do
-        createCmd $ OfferToPaintHouseByOwner with
-          painter = painter; houseOwner = houseOwner; bank = bank; iouId = iouId
+        createCmd $ OfferToPaintHouseByOwner with painter = painter; houseOwner = houseOwner; bank = bank; iouId = iouId
     painterIouId <- submit painter do
       exerciseCmd offerId AcceptByPainter
     submit painter do

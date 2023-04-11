@@ -1,0 +1,79 @@
+module Iou where
+
+template Iou
+    with
+        issuer : Party
+        owner : Party
+        currency : Text
+        amount : Decimal
+        observers : [Party]
+    where
+        ensure amount > 0.0
+        signatory issuer, owner
+
+
+        choice Iou_Split : (IouCid, IouCid)
+            with
+                splitAmount: Decimal
+            controller owner
+            do
+                let restAmount = amount - splitAmount
+                splitCid <- create this with amount = splitAmount
+                restCid <- create this with amount = restAmount
+                return (splitCid, restCid)
+
+
+        choice Iou_Merge : IouCid
+            with
+                otherCid: IouCid
+            controller owner
+            do
+                otherIou <- fetch otherCid
+                -- Check the two IOU's are compatible
+                assert (currency == otherIou.currency && owner == otherIou.owner && issuer == otherIou.issuer)
+                -- Retire the old Iou
+                archive otherCid
+                -- Return the merged Iou
+                create this with amount = amount + otherIou.amount
+
+        choice Iou_Transfer : ContractId IouTransfer
+            with
+                newOwner : Party
+            controller owner
+            do create IouTransfer with iou = this; newOwner
+
+
+
+        choice Iou_AddObserver : IouCid
+            with
+                newObserver : Party
+            controller owner
+            do create this with observers = newObserver :: observers
+
+        choice Iou_RemoveObserver : IouCid
+            with
+                oldObserver : Party
+            controller owner
+            do create this with observers = filter (/= oldObserver) observers
+
+
+        choice IouTrade_Accept : (IouCid, IouCid)
+            with
+                quoteIouCid : IouCid
+            controller seller
+            do
+                baseIou <- fetch baseIouCid
+                baseIssuer === baseIou.issuer
+                baseCurrency === baseIou.currency
+                baseAmount === baseIou.amount
+                buyer === baseIou.owner
+                quoteIou <- fetch quoteIouCid
+                quoteIssuer === quoteIou.issuer
+                quoteCurrency === quoteIou.currency
+                quoteAmount === quoteIou.amount
+                seller === quoteIou.owner
+                quoteIouTransferCid <- exercise quoteIouCid Iou_Transfer with newOwner = buyer
+                transferredQuoteIouCid <- exercise quoteIouTransferCid IouTransfer_Accept
+                baseIouTransferCid <- exercise baseIouCid Iou_Transfer with newOwner = seller
+                transferredBaseIouCid <- exercise baseIouTransferCid IouTransfer_Accept
+                return (transferredQuoteIouCid, transferredBaseIouCid)
